@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ecological Systems Model with Physics</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #000;
+            overflow: hidden;
+            color: white;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        .controls {
+            padding: 15px;
+            background-color: rgba(0, 0, 0, 0.7);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        select, input, button {
+            padding: 8px 12px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #333;
+            color: white;
+        }
+        
+        select {
+            min-width: 200px;
+        }
+        
+        input {
+            flex-grow: 1;
+            min-width: 200px;
+            background-color: #333;
+            color: white;
+        }
+        
+        input::placeholder {
+            color: #aaa;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button.reset {
+            background-color: #f44336;
+        }
+        
+        button.reset:hover {
+            background-color: #d32f2f;
+        }
+        
+        .canvas-container {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            touch-action: none;
+            display: block;
+        }
+        
+        .instructions {
+            padding: 15px;
+            background-color: rgba(33, 150, 243, 0.1);
+            border-left: 4px solid #2196F3;
+            margin-top: 10px;
+        }
+        
+        .instructions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .instructions h3 {
+            margin-top: 0;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+        
+        .close-instructions {
+            background: none;
+            border: 2px solid #2196F3;
+            color: #2196F3;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px 10px;
+            line-height: 1;
+            border-radius: 4px;
+        }
+        
+        .show-instructions {
+            margin-right: 10px;
+            background-color: #2196F3;
+        }
+        
+        .instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 100;
+            pointer-events: none;
+            max-width: 300px;
+            transition: opacity 0.2s;
+        }
+        
+        .export-import {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <div class="control-row">
+                <select id="systemSelect">
+                    <option value="individual">Individual</option>
+                    <option value="micro">Microsystem</option>
+                    <option value="meso">Mesosystem</option>
+                    <option value="exo">Exosystem</option>
+                    <option value="macro">Macrosystem</option>
+                    <option value="chrono">Chronosystem</option>
+                </select>
+                <input type="text" id="itemText" placeholder="Enter item text here...">
+                <button id="addButton">Add Item</button>
+                <button id="resetButton" class="reset">Reset All</button>
+            </div>
+            <div class="control-row">
+                <div class="export-import">
+                    <button id="showInstructionsButton" class="show-instructions">Show Instructions</button>
+                    <button id="exportButton">Export Data</button>
+                    <button id="importButton">Import Data</button>
+                    <input type="file" id="importFile" style="display: none;">
+                </div>
+            </div>
+            <div class="instructions">
+                <div class="instructions-header">
+                    <h3>How to Use This Tool:</h3>
+                    <button class="close-instructions">×</button>
+                </div>
+                <ul>
+                    <li>Select a system from the dropdown menu</li>
+                    <li>Type the text for your new item</li>
+                    <li>Click "Add Item" (or press Enter)</li>
+                    <li>The item will appear in its appropriate system with physics</li>
+                    <li>Items are attracted to their respective system's orbit</li>
+                    <li>Items repel each other to avoid overlapping</li>
+                    <li>Click and drag to pan around the model</li>
+                    <li>Use mouse wheel to zoom in and out</li>
+                    <li>Hover over any item to see its full text</li>
+                    <li>Use Export/Import to save or load your work</li>
+                </ul>
+            </div>
+        </div>
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Constants and configuration
+        const SYSTEMS = {
+            individual: { name: '', color: '#9C27B0', radius: 80, orbitStrength: 1.0 },
+            micro: { name: 'Microsystem', color: '#2196F3', radius: 180, orbitStrength: 0.9 },
+            meso: { name: 'Mesosystem', color: '#4CAF50', radius: 280, orbitStrength: 0.8 },
+            exo: { name: 'Exosystem', color: '#FF9800', radius: 380, orbitStrength: 0.7 },
+            macro: { name: 'Macrosystem', color: '#F44336', radius: 480, orbitStrength: 0.6 },
+            chrono: { name: 'Chronosystem', color: '#795548', radius: 580, orbitStrength: 0.5, isHorizontal: true }
+        };
+        
+        // Fixed physics parameters (no longer adjustable)
+        const GRAVITY = 0.003;
+        const REPULSION = 0.05;
+        const SPEED_MULTIPLIER = 0.2;
+        const DRAG = 0.98; // Friction/drag coefficient to prevent excessive acceleration
+        
+        // Golden ratio for natural spacing
+        const PHI = (1 + Math.sqrt(5)) / 2;
+        
+        // Main app class
+        class EcologicalSystemsModel {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Initialize with empty items
+                this.items = {
+                    individual: [],
+                    micro: [],
+                    meso: [],
+                    exo: [],
+                    macro: [],
+                    chrono: []
+                };
+                
+                this.hoveredItem = null;
+                this.tooltip = this.createTooltip();
+                
+                this.width = 0;
+                this.height = 0;
+                this.centerX = 0;
+                this.centerY = 0;
+                
+                // Panning and zoom properties
+                this.isDragging = false;
+                this.lastMouseX = 0;
+                this.lastMouseY = 0;
+                this.offsetX = 0;
+                this.offsetY = 0;
+                this.scale = 1.0;
+                
+                this.setupCanvas();
+                this.setupEventListeners();
+                
+                // Load example data
+                this.loadExampleData();
+                
+                this.animate();
+            }
+            
+            // Load example data
+            loadExampleData() {
+                const exampleData = {
+                    "individual": [
+                        {"text":"Individual","x":80,"y":0,"vx":0.0076801864413847745,"vy":-0.00180306485311732,"radius":47.015625,"system":"individual"}
+                    ],
+                    "micro": [
+                        {"text":"Family","x":80,"y":0,"vx":-0.04960978141956418,"vy":0.02046830430550302,"radius":47.015625,"system":"micro"},
+                        {"text":"Friends","x":24.721359549995796,"y":76.08452130361228,"vx":-0.0016122244635740773,"vy":-0.026999557514406438,"radius":47.015625,"system":"micro"},
+                        {"text":"School/Work","x":-64.72135954999578,"y":47.02282018339786,"vx":-0.013759969269337917,"vy":0.0018905864535363054,"radius":47.015625,"system":"micro"},
+                        {"text":"Neighbors","x":-64.72135954999581,"y":-47.02282018339784,"vx":-0.03801074295180602,"vy":-0.0028305544214172196,"radius":47.015625,"system":"micro"},
+                        
+                    ],
+                    "meso": [
+                        {"text":"Parent-Teacher Meetings","x":80,"y":0,"vx":0.0012517796314894108,"vy":0.034538069069713614,"radius":47.015625,"system":"meso"},
+                        {"text":"Work-Home Balance","x":-80,"y":9.797174393178826e-15,"vx":-0.04164778821885116,"vy":0.021220570585876855,"radius":47.015625,"system":"meso"}
+                    ],
+                    "exo": [
+                        {"text":"Local Government","x":80,"y":0,"vx":-0.017587805455811026,"vy":0.048897398706992154,"radius":47.015625,"system":"exo"},
+                        {"text":"Parents' Workplace","x":-39.999999999999986,"y":69.2820323027551,"vx":0.031345051523178555,"vy":-0.013433284286402225,"radius":47.015625,"system":"exo"},
+                        {"text":"Extended Family","x":-40.000000000000036,"y":-69.28203230275507,"vx":-0.04590287767945838,"vy":-0.03943764805239561,"radius":47.015625,"system":"exo"}
+                    ],
+                    "macro": [
+                        {"text":"Cultural Values","x":80,"y":0,"vx":-0.04896970894987118,"vy":0.02546565349188501,"radius":47.015625,"system":"macro"},
+                        {"text":"Economic Systems","x":-80,"y":9.797174393178826e-15,"vx":0.03508144739835639,"vy":-0.037834918133126116,"radius":47.015625,"system":"macro"}
+                    ],
+                    "chrono": []
+                };
+                
+                // Adjust chronosystem entries to appear on the line
+                const chronoY = SYSTEMS.chrono.radius - 200;
+                let lastX = 150;
+                
+                // Create proper chronosystem entries with correct positioning
+                const chronoEntries = [
+                    "Life Transitions",
+                    "Historical Events",
+                    "Development Changes"
+                ];
+                
+                chronoEntries.forEach(text => {
+                    // Calculate bubble radius
+                    this.ctx.font = '12px Arial';
+                    const textWidth = this.ctx.measureText(text).width;
+                    const bubbleRadius = Math.max(25, textWidth / 1.5 + 15);
+                    
+                    // Add to the exampleData
+                    exampleData.chrono.push({
+                        text: text,
+                        x: lastX,
+                        y: chronoY,
+                        vx: 0,
+                        vy: 0,
+                        radius: bubbleRadius,
+                        system: "chrono"
+                    });
+                    
+                    // Increment position for next item
+                    lastX += 150;
+                });
+                
+                this.items = exampleData;
+            }
+            
+            createTooltip() {
+                const tooltip = document.createElement('div');
+                tooltip.className = 'tooltip';
+                tooltip.style.opacity = '0';
+                document.body.appendChild(tooltip);
+                return tooltip;
+            }
+            
+            setupCanvas() {
+                const resize = () => {
+                    const container = document.querySelector('.canvas-container');
+                    this.canvas.width = container.offsetWidth;
+                    this.canvas.height = container.offsetHeight;
+                    this.width = this.canvas.width;
+                    this.height = this.canvas.height;
+                    this.centerX = this.width / 2;
+                    this.centerY = this.height / 2;
+                    this.render();
+                };
+                
+                window.addEventListener('resize', resize);
+                resize();
+            }
+            
+            setupEventListeners() {
+                // Add item button
+                document.getElementById('addButton').addEventListener('click', () => this.addItem());
+                
+                // Input field
+                const inputField = document.getElementById('itemText');
+                inputField.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.addItem();
+                    }
+                });
+                
+                // Reset button
+                document.getElementById('resetButton').addEventListener('click', () => this.resetAll());
+                
+                // Export functionality
+                document.getElementById('exportButton').addEventListener('click', () => {
+                    const dataStr = JSON.stringify(this.items);
+                    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                    
+                    const exportFileDefaultName = 'ecological-systems-model.json';
+                    
+                    const linkElement = document.createElement('a');
+                    linkElement.setAttribute('href', dataUri);
+                    linkElement.setAttribute('download', exportFileDefaultName);
+                    linkElement.click();
+                });
+                
+                // Import functionality
+                document.getElementById('importButton').addEventListener('click', () => {
+                    document.getElementById('importFile').click();
+                });
+                
+                document.getElementById('importFile').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            try {
+                                const importedItems = JSON.parse(e.target.result);
+                                if (importedItems && typeof importedItems === 'object') {
+                                    // Add physics properties to imported items
+                                    Object.keys(importedItems).forEach(system => {
+                                        importedItems[system].forEach(item => {
+                                            if (!item.vx) item.vx = 0;
+                                            if (!item.vy) item.vy = 0;
+                                        });
+                                    });
+                                    
+                                    this.items = importedItems;
+                                    alert("Data imported successfully!");
+                                } else {
+                                    alert("Invalid file format!");
+                                }
+                            } catch (error) {
+                                alert("Error importing file: " + error.message);
+                            }
+                        };
+                        reader.readAsText(file);
+                    }
+                });
+                
+                // Close instructions button with canvas resize fix
+                document.querySelector('.close-instructions').addEventListener('click', () => {
+                    const instructionsElement = document.querySelector('.instructions');
+                    instructionsElement.style.display = 'none';
+                    
+                    // Trigger a resize to fix canvas dimensions after instructions are hidden
+                    setTimeout(() => {
+                        this.setupCanvas();
+                    }, 50);
+                });
+                
+                // Show instructions button
+                document.getElementById('showInstructionsButton').addEventListener('click', () => {
+                    document.querySelector('.instructions').style.display = 'block';
+                    
+                    // Trigger a resize to fix canvas dimensions after instructions are shown
+                    setTimeout(() => {
+                        this.setupCanvas();
+                    }, 50);
+                });
+                
+                // Mouse interaction for panning and tooltip
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.lastMouseX = e.offsetX;
+                    this.lastMouseY = e.offsetY;
+                    this.canvas.style.cursor = 'grabbing';
+                });
+                
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (this.isDragging) {
+                        const dx = e.offsetX - this.lastMouseX;
+                        const dy = e.offsetY - this.lastMouseY;
+                        this.offsetX += dx;
+                        this.offsetY += dy;
+                        this.lastMouseX = e.offsetX;
+                        this.lastMouseY = e.offsetY;
+                        this.render();
+                    } else {
+                        this.checkHover(e.offsetX, e.offsetY);
+                    }
+                });
+                
+                this.canvas.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'default';
+                });
+                
+                this.canvas.addEventListener('mouseleave', () => {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'default';
+                    this.hideTooltip();
+                });
+                
+                // Add mouse wheel zoom
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                    this.zoomAtPoint(zoomFactor, e.offsetX, e.offsetY);
+                });
+            }
+            
+            addItem() {
+                const systemSelect = document.getElementById('systemSelect');
+                const itemTextInput = document.getElementById('itemText');
+                
+                const system = systemSelect.value;
+                const text = itemTextInput.value.trim();
+                
+                if (text) {
+                    // Calculate text size to determine bubble size
+                    this.ctx.font = '12px Arial';
+                    const textWidth = this.ctx.measureText(text).width;
+                    const bubbleRadius = Math.max(25, textWidth / 1.5 + 15); // Ensure minimum size but accommodate text
+                    
+                    // Different placement logic for chronosystem vs circular systems
+                    let x, y, vx, vy;
+                    
+                    if (system === 'chrono') {
+                        // For chronosystem, place directly on the horizontal line
+                        const chronoY = SYSTEMS.chrono.radius - 200; // Same Y as the chronosystem line
+                        
+                        // Find the rightmost position of any existing chronosystem item
+                        let rightmostX = 150; // Starting position if no items exist
+                        if (this.items[system].length > 0) {
+                            rightmostX = Math.max(...this.items[system].map(item => item.x)) + 120; // Add spacing
+                        }
+                        
+                        // Place new item to the right of all existing items
+                        x = rightmostX;
+                        y = chronoY; // Place directly on the chronosystem line
+                        
+                        // Initial velocity (minimal for chronosystem)
+                        vx = 0;
+                        vy = 0; // No initial vertical velocity
+                    } else {
+                        // For circular systems, use original placement logic
+                        // Generate a position using golden ratio spiral placement
+                        const count = this.items[system].length;
+                        const angle = count * (2 * Math.PI / PHI);
+                        
+                        // Get the orbit radius for this system
+                        const orbitRadius = SYSTEMS[system].radius;
+                        
+                        // Start position slightly off the exact orbit
+                        const randomOffset = Math.random() * 40 - 20; // ±20px from the orbit
+                        const placementRadius = orbitRadius + randomOffset;
+                        
+                        // Calculate initial position
+                        x = Math.cos(angle) * placementRadius;
+                        y = Math.sin(angle) * placementRadius;
+                        
+                        // Add some initial velocity tangent to the orbit
+                        const speed = 0.2;
+                        vx = -Math.sin(angle) * speed; // Tangential
+                        vy = Math.cos(angle) * speed; // Tangential
+                    }
+                    
+                    this.items[system].push({
+                        text,
+                        x,
+                        y,
+                        vx,
+                        vy,
+                        radius: bubbleRadius,
+                        system: system
+                    });
+                    
+                    // Clear input
+                    itemTextInput.value = '';
+                    itemTextInput.focus();
+                }
+            }
+            
+            resetAll() {
+                if (confirm("Are you sure you want to reset all items?")) {
+                    Object.keys(this.items).forEach(system => {
+                        this.items[system] = [];
+                    });
+                }
+            }
+            
+            zoom(factor) {
+                this.zoomAtPoint(factor, this.width / 2, this.height / 2);
+            }
+            
+            zoomAtPoint(factor, x, y) {
+                // Add zoom functionality
+                // Calculate world coordinates before zoom
+                const worldX = (x - this.centerX - this.offsetX) / this.scale;
+                const worldY = (y - this.centerY - this.offsetY) / this.scale;
+                
+                // Apply zoom factor
+                this.scale *= factor;
+                
+                // Limit zoom level
+                this.scale = Math.max(0.2, Math.min(3, this.scale));
+                
+                // Adjust offset to zoom at mouse point
+                this.offsetX = x - this.centerX - (worldX * this.scale);
+                this.offsetY = y - this.centerY - (worldY * this.scale);
+                
+                this.render();
+            }
+            
+            checkHover(mouseX, mouseY) {
+                // Adjust mouse coordinates to be relative to canvas center, accounting for pan and zoom
+                const worldX = (mouseX - this.centerX - this.offsetX) / this.scale;
+                const worldY = (mouseY - this.centerY - this.offsetY) / this.scale;
+                
+                // Check if mouse is over an item
+                let hoveredItem = null;
+                
+                Object.entries(this.items).forEach(([system, items]) => {
+                    items.forEach(item => {
+                        const dx = item.x - worldX;
+                        const dy = item.y - worldY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance <= item.radius) {
+                            hoveredItem = { system, item };
+                        }
+                    });
+                });
+                
+                if (hoveredItem) {
+                    this.canvas.style.cursor = 'pointer';
+                    this.showTooltip(hoveredItem.item.text, mouseX, mouseY);
+                } else {
+                    this.canvas.style.cursor = 'default';
+                    this.hideTooltip();
+                }
+                
+                this.hoveredItem = hoveredItem;
+            }
+            
+            showTooltip(text, x, y) {
+                this.tooltip.textContent = text;
+                this.tooltip.style.opacity = '1';
+                
+                // Position the tooltip near the mouse, but not directly under it
+                const padding = 15;
+                this.tooltip.style.left = `${x + padding}px`;
+                this.tooltip.style.top = `${y + padding}px`;
+                
+                // Check if tooltip is going off-screen horizontally
+                const tooltipRect = this.tooltip.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                
+                if (tooltipRect.right > viewportWidth) {
+                    this.tooltip.style.left = `${x - tooltipRect.width - padding}px`;
+                }
+            }
+            
+            hideTooltip() {
+                this.tooltip.style.opacity = '0';
+            }
+            
+            updatePhysics() {
+                // For each system
+                Object.entries(this.items).forEach(([systemKey, items]) => {
+                    const system = SYSTEMS[systemKey];
+                    
+                    // Update each item's position based on physics
+                    items.forEach(item => {
+                        if (system.isHorizontal) {
+                            // For chronosystem (horizontal line)
+                            const targetY = system.radius - 200; // Same Y position as the line
+
+                            // Calculate vertical force to strongly attract to the horizontal line
+                            const verticalDiff = targetY - item.y;
+                            const verticalForce = verticalDiff * GRAVITY * 2 * system.orbitStrength;
+                            item.vy += verticalForce;
+
+                            // Horizontal forces are minimal for chronosystem
+                            // Stronger dampening to keep items mostly in place horizontally
+                            item.vx *= 0.95;
+                            
+                            // Extra dampening for vertical movement to keep items on the line
+                            if (Math.abs(verticalDiff) < 5) {
+                                item.vy *= 0.8;
+                            }
+                        } else {
+                            // For circular systems
+                            // Calculate distance to target orbit
+                            const currentRadius = Math.sqrt(item.x * item.x + item.y * item.y);
+                            const targetRadius = system.radius;
+                            const radialDiff = targetRadius - currentRadius;
+                            
+                            // Calculate angle of item from center
+                            const angle = Math.atan2(item.y, item.x);
+                            
+                            // Orbit attraction force (radial)
+                            const orbitForce = radialDiff * GRAVITY * system.orbitStrength;
+                            item.vx += Math.cos(angle) * orbitForce;
+                            item.vy += Math.sin(angle) * orbitForce;
+                        }
+                        
+                        // Apply repulsion from other items in the same system
+                        items.forEach(otherItem => {
+                            if (item === otherItem) return;
+                            
+                            const dx = otherItem.x - item.x;
+                            const dy = otherItem.y - item.y;
+                            const distSq = dx * dx + dy * dy;
+                            const dist = Math.sqrt(distSq);
+                            
+                            // Repulsion only happens when items are close
+                            const minDist = item.radius + otherItem.radius + 5;
+                            if (dist < minDist) {
+                                const repulsionForce = REPULSION * (minDist - dist) / minDist;
+                                const fx = dx / dist * repulsionForce;
+                                const fy = dy / dist * repulsionForce;
+                                
+                                item.vx -= fx;
+                                item.vy -= fy;
+                            }
+                        });
+                        
+                        // Apply drag to prevent excessive acceleration
+                        item.vx *= DRAG;
+                        item.vy *= DRAG;
+                        
+                        // Update position based on velocity and speed multiplier
+                        item.x += item.vx * SPEED_MULTIPLIER;
+                        item.y += item.vy * SPEED_MULTIPLIER;
+                    });
+                });
+            }
+            
+            render() {
+                // Clear canvas
+                this.ctx.fillStyle = '#000000';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                
+                // Apply view transformations (center, pan, zoom)
+                this.ctx.save();
+                this.ctx.translate(this.centerX + this.offsetX, this.centerY + this.offsetY);
+                this.ctx.scale(this.scale, this.scale);
+                
+                // Draw systems (concentric circles)
+                this.drawSystems();
+                
+                // Draw items
+                this.drawItems();
+                
+                // Restore original transformation
+                this.ctx.restore();
+            }
+            
+            drawSystems() {
+                // Draw the systems in reverse order (outer to inner)
+                Object.entries(SYSTEMS).reverse().forEach(([key, system]) => {
+                    if (key === 'chrono') {
+                        // Draw chronosystem as a horizontal line
+                        const lineY = system.radius - 200; // Position the line below the other systems
+                        const lineLength = 2000; // Make it long enough to span across the screen
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(-lineLength/2, lineY);
+                        this.ctx.lineTo(lineLength/2, lineY);
+                        this.ctx.strokeStyle = system.color;
+                        this.ctx.lineWidth = 4;
+                        this.ctx.stroke();
+
+                        // Draw a light background
+                        this.ctx.fillStyle = system.color + '10'; // 10% opacity
+                        this.ctx.fillRect(-lineLength/2, lineY - 40, lineLength, 80);
+                        
+                        // Draw system label
+                        this.ctx.save();
+                        this.ctx.font = 'bold 16px Arial';
+                        this.ctx.fillStyle = system.color;
+                        this.ctx.textAlign = 'center';
+                        this.ctx.fillText(system.name, 0, lineY - 20);
+                        this.ctx.restore();
+                    } else {
+                        // Draw other systems as circles
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, 0, system.radius, 0, Math.PI * 2);
+                        this.ctx.strokeStyle = system.color;
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+                        
+                        // Fill with very light color
+                        this.ctx.fillStyle = system.color + '10'; // 10% opacity
+                        this.ctx.fill();
+                        
+                        // Draw system label
+                        this.ctx.save();
+                        this.ctx.font = 'bold 16px Arial';
+                        this.ctx.fillStyle = system.color;
+                        this.ctx.textAlign = 'center';
+                        
+                        // Position labels at the top of each circle
+                        const labelY = -system.radius + 20;
+                        this.ctx.fillText(system.name, 0, labelY);
+                        this.ctx.restore();
+                    }
+                });
+                
+                // Draw the individual at the center
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, 30, 0, Math.PI * 2);
+                this.ctx.fillStyle = SYSTEMS.individual.color + '40'; // 40% opacity
+                this.ctx.fill();
+                this.ctx.strokeStyle = SYSTEMS.individual.color;
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+                
+                this.ctx.font = 'bold 14px Arial';
+                this.ctx.fillStyle = SYSTEMS.individual.color;
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                this.ctx.fillText('Individual', 0, 0);
+            }
+            
+            drawItems() {
+                Object.entries(this.items).forEach(([system, items]) => {
+                    const systemConfig = SYSTEMS[system];
+                    
+                    items.forEach(item => {
+                        // Draw circle (bubble)
+                        this.ctx.beginPath();
+                        this.ctx.arc(item.x, item.y, item.radius, 0, Math.PI * 2);
+                        this.ctx.fillStyle = systemConfig.color + '80'; // 50% opacity
+                        this.ctx.fill();
+                        this.ctx.strokeStyle = systemConfig.color;
+                        this.ctx.lineWidth = 1.5;
+                        this.ctx.stroke();
+                        
+                        // Draw text
+                        this.ctx.font = '12px Arial';
+                        this.ctx.fillStyle = '#ffffff';
+                        this.ctx.textAlign = 'center';
+                        this.ctx.textBaseline = 'middle';
+                        
+                        // Word wrap approach for text
+                        const maxWidth = item.radius * 1.8;
+                        const words = item.text.split(' ');
+                        let lines = [];
+                        let currentLine = words[0];
+                        
+                        for (let i = 1; i < words.length; i++) {
+                            const testLine = currentLine + ' ' + words[i];
+                            const metrics = this.ctx.measureText(testLine);
+                            const testWidth = metrics.width;
+                            
+                            if (testWidth > maxWidth) {
+                                lines.push(currentLine);
+                                currentLine = words[i];
+                            } else {
+                                currentLine = testLine;
+                            }
+                        }
+                        lines.push(currentLine);
+                        
+                        // Limit to 3 lines max
+                        if (lines.length > 3) {
+                            lines = lines.slice(0, 2);
+                            lines.push(lines[1].split(' ').slice(0, -1).join(' ') + '...');
+                        }
+                        
+                        // Draw each line of text
+                        const lineHeight = 15;
+                        const totalHeight = lines.length * lineHeight;
+                        let y = item.y - (totalHeight / 2) + (lineHeight / 2);
+                        
+                        lines.forEach(line => {
+                            this.ctx.fillText(line, item.x, y);
+                            y += lineHeight;
+                        });
+                    });
+                });
+            }
+            
+            animate() {
+                this.updatePhysics();
+                this.render();
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+        
+        // Initialize the app when the window loads
+        window.addEventListener('load', () => {
+            const app = new EcologicalSystemsModel();
+        });
+    </script>
+</body>
+</html>
